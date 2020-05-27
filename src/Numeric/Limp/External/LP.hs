@@ -16,6 +16,7 @@ import           Universum          hiding (Constraint)
 import           Numeric.Limp.Canon
 import           Numeric.Limp.Rep
 
+import           Data.Char          (isDigit, isLetter)
 import qualified Data.Map           as Map
 import qualified Data.Set           as Set
 import qualified Data.Text          as Text
@@ -43,6 +44,19 @@ class NamedVariable var where
 
 instance (NamedVariable z, NamedVariable r) => NamedVariable (Either z r) where
     varName = either varName varName
+instance NamedVariable Text where
+    varName = filterChars
+instance NamedVariable String where
+    varName = filterChars . toText
+
+filterChars :: Text -> Text
+filterChars str = case Text.uncons filtered of
+        Just (c, _t) | isLetter c -> filtered
+        _                         -> "v" <> filtered
+    where
+        f :: Char -> Bool
+        f c = isLetter c || isDigit c || c `elem` ("_[]{}/.&#$%~'@^" :: String)
+        filtered = Text.filter f str
 
 linearFunction :: (NamedVariable z, NamedVariable r, Show (R c), Show (Z c)) => Linear z r c -> Text
 linearFunction (Linear coeffs) = Text.intercalate " + " $
