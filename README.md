@@ -5,6 +5,6 @@
 ### macOS
 
 ```
-brew tap coin-or-tools/coinor
+brew tap coin-or-tools/coinor --with-parallel
 brew install cbc
 ```
