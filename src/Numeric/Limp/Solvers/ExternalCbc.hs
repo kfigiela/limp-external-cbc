@@ -10,6 +10,7 @@ import           Numeric.Limp.Canon             (Program, varsOfProgram)
 import           Numeric.Limp.External.LP       (NamedVariable, convert, varName)
 import           Numeric.Limp.External.Solution (SolutionStatus, solution)
 import           Numeric.Limp.Rep               (Assignment (..), IntDouble, R (..), Z (..))
+import           System.Exit                    (ExitCode)
 import           System.IO.Temp                 (withSystemTempDirectory)
 import           System.Process                 (rawSystem)
 import           Text.Parsec.String             (parseFromFile)
@@ -33,11 +34,11 @@ solve p =
   withSystemTempDirectory "limp.lp" $ \tmpDir -> do
     let problemFile = tmpDir <> "/problem.lp"
         solutionFile = tmpDir <> "/problem.solution"
-    putTextLn $ (convert p)
-    writeFile problemFile (convert p)
-    rawSystem "cbc" $ cbcArgs problemFile solutionFile
+        lpProgram = convert p
+
+    writeFile problemFile lpProgram
+    status <- rawSystem "cbc" $ cbcArgs problemFile solutionFile
     result <- readFile solutionFile
-    putTextLn $ result
     parsedSolution <- parseFromFile solution solutionFile
     pure $ case parsedSolution of
       Left err                            -> Left $ "Parse error: " <> show err

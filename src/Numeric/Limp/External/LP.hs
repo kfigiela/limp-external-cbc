@@ -31,7 +31,7 @@ instance NamedVariable String where
 varNameL :: NamedVariable var => var -> LText
 varNameL = toLText . varName
 
-type LPProgram z r c = (NamedVariable z, NamedVariable r, Rep c, Show z, Show r, Show c)
+type LPProgram z r = (NamedVariable z, NamedVariable r, Ord z, Ord r)
 
 filterChars :: Text -> Text
 filterChars str = case Text.uncons filtered of
@@ -49,6 +49,13 @@ linearFunction (Linear coeffs) = LText.intercalate " + " $ varWithCoeff <$> Map.
     varWithCoeff (var, coeff) | coeff == 1 = varNameL var
     varWithCoeff (var, coeff) = show coeff <> " " <> varNameL var
 
+convertConstraint :: (NamedVariable z, NamedVariable r, Rep c, Show (R c), Show (Z c)) => Constraint1 z r c -> [LText]
+convertConstraint (C1 (Just lowerBound) fun (Just upperBound)) | lowerBound == upperBound = [prettyConstraint fun "=" lowerBound]
+convertConstraint (C1 lowerBoundMb fun upperBoundMb) = catMaybes [prettyConstraint fun ">=" <$> lowerBoundMb, prettyConstraint fun "<=" <$> upperBoundMb]
+
+prettyConstraint :: (NamedVariable z, NamedVariable r, Rep c, Show (Z c), Show (R c)) => Linear z r c -> LText -> R c -> LText
+prettyConstraint fun op rhs = linearFunction fun <> " " <> op <> " " <> show rhs
+
 convert :: (Ord z, Ord r, NamedVariable r, NamedVariable z) => Program z r IntDouble -> Text
 convert p = toText $ LText.unlines $ mconcat
     [ ["Minimize"]
@@ -64,13 +71,8 @@ convert p = toText $ LText.unlines $ mconcat
     , ["End"]
     ]
     where
-    textConstraints = mconcat $ mkConstraint <$> constraints
+    textConstraints = mconcat $ convertConstraint <$> constraints
     Constraint constraints = _constraints p
-    mkConstraint :: (NamedVariable z, NamedVariable r) => Constraint1 z r IntDouble -> [LText]
-    mkConstraint (C1 (Just lowerBound) fun (Just upperBound)) | lowerBound == upperBound = [showCons fun "=" lowerBound]
-    mkConstraint (C1 lowerBoundMb fun upperBoundMb) = catMaybes [showCons fun ">=" <$> lowerBoundMb, showCons fun "<=" <$> upperBoundMb]
-    showCons fun op rhs = linearFunction fun <> " " <> op <> " " <> show rhs
-
     allBounds = Map.toList $ _bounds p
     bounds = catMaybes $ uncurry mkBounds <$> allBounds
     mkBounds :: (NamedVariable z, NamedVariable r) => Either z r -> (Maybe (R IntDouble), Maybe (R IntDouble)) -> Maybe LText
