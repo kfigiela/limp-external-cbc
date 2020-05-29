@@ -56,3 +56,17 @@ tests:
       - -with-rtsopts=-N
     dependencies:
       - limp-external-cbc
+      - hspec
+      - hspec-discover
+      - hspec-expectations
+
+default-extensions:
+  - ConstraintKinds
+  - DefaultSignatures
+  - FlexibleContexts
+  - FlexibleInstances
+  - OverloadedStrings
+  - ScopedTypeVariables
+  - TupleSections
+  - TypeApplications
+  - UndecidableInstances

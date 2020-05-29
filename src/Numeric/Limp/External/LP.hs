@@ -1,13 +1,5 @@
 -- http://lpsolve.sourceforge.net/5.0/CPLEX-format.htm
-{-# LANGUAGE DefaultSignatures    #-}
-{-# LANGUAGE FlexibleContexts     #-}
-{-# LANGUAGE FlexibleInstances    #-}
-{-# LANGUAGE NoImplicitPrelude    #-}
-{-# LANGUAGE OverloadedStrings    #-}
-{-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE TupleSections        #-}
-{-# LANGUAGE TypeApplications     #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 
 module Numeric.Limp.External.LP where
 
@@ -20,22 +12,7 @@ import           Data.Char          (isDigit, isLetter)
 import qualified Data.Map           as Map
 import qualified Data.Set           as Set
 import qualified Data.Text          as Text
-
-data ConstraintType = Eq | Gt | Lt
-
-data MPSConstraint z r c =
-    MPSConstraint
-    { constraintType :: ConstraintType
-    , function       :: Linear z r c
-    , rhs            :: R c
-    }
-
-convertConstraint :: Eq (R c) => Constraint1 z r c -> [MPSConstraint z r c]
-convertConstraint (C1 (Just lowerBound) formula (Just upperBound)) | lowerBound == upperBound = [MPSConstraint Eq formula lowerBound]
-convertConstraint (C1 lowerBoundMb formula upperBoundMb) = catMaybes [MPSConstraint Gt formula <$> lowerBoundMb, MPSConstraint Lt formula <$> upperBoundMb]
-
-convertConstraints :: Eq (R c) => Constraint z r c -> [MPSConstraint z r c]
-convertConstraints (Constraint constraints) = mconcat $ convertConstraint <$> constraints
+import qualified Data.Text.Lazy     as LText
 
 class NamedVariable var where
     varName :: var -> Text
@@ -46,58 +23,68 @@ instance (NamedVariable z, NamedVariable r) => NamedVariable (Either z r) where
     varName = either varName varName
 instance NamedVariable Text where
     varName = filterChars
+instance NamedVariable LText where
+    varName = filterChars . toText
 instance NamedVariable String where
     varName = filterChars . toText
 
+varNameL :: NamedVariable var => var -> LText
+varNameL = toLText . varName
+
+type LPProgram z r c = (NamedVariable z, NamedVariable r, Rep c, Show z, Show r, Show c)
+
 filterChars :: Text -> Text
 filterChars str = case Text.uncons filtered of
-        Just (c, _t) | isLetter c -> filtered
+        Just (c, _t) | isLetter c -> filtered -- variable name has to start with letter
         _                         -> "v" <> filtered
     where
         f :: Char -> Bool
-        f c = isLetter c || isDigit c || c `elem` ("_[]{}/.&#$%~'@^" :: String)
+        f c = isLetter c || isDigit c || c `elem` ("_[]{}/.&#$%~'@^" :: String) -- only those chars are allowed
         filtered = Text.filter f str
 
-linearFunction :: (NamedVariable z, NamedVariable r, Show (R c), Show (Z c)) => Linear z r c -> Text
-linearFunction (Linear coeffs) = Text.intercalate " + " $
-    (\(var, coeff) -> show coeff <> " " <> varName var) <$> Map.toList coeffs
+linearFunction :: (NamedVariable z, NamedVariable r, Rep c, Show (R c), Show (Z c)) => Linear z r c -> LText
+linearFunction (Linear coeffs) = LText.intercalate " + " $ varWithCoeff <$> Map.toList coeffs
+    where
+    varWithCoeff :: (NamedVariable z, NamedVariable r, Show (R c), Show (Z c), Rep c) => (Either z r, R c) -> LText
+    varWithCoeff (var, coeff) | coeff == 1 = varNameL var
+    varWithCoeff (var, coeff) = show coeff <> " " <> varNameL var
 
 convert :: (Ord z, Ord r, NamedVariable r, NamedVariable z) => Program z r IntDouble -> Text
-convert p = Text.unlines
-    [ "Minimize"
-    , indent $ linearFunction (_objective p)
-    , "Subject to"
-    , textConstraints
-    , "Bounds"
-    , bounds
-    , "General"
-    , integerVariablesLP
-    , "Binary"
-    , binaryVariablesLP
-    , "End"
+convert p = toText $ LText.unlines $ mconcat
+    [ ["Minimize"]
+    , indent [linearFunction (_objective p)]
+    , ["Subject to"]
+    , indent textConstraints
+    , ["Bounds"]
+    , indent bounds
+    , ["General"]
+    , indent integerVariables
+    , ["Binary"]
+    , indent binaryVariables
+    , ["End"]
     ]
     where
-    constraints = zip (("C"<>) . show <$> [1..]) $ convertConstraints (_constraints p)
-    textConstraints = Text.unlines $ indent . mkConstraint <$> constraints
-    mkConstraint :: (NamedVariable z, NamedVariable r) => (Text, MPSConstraint z r IntDouble) -> Text
-    mkConstraint (ix, MPSConstraint tpe function rhs) = " " <> ix <> ": " <> linearFunction function <> " " <> op <> " " <> show rhs
-        where
-        op = case tpe of
-            Eq -> "="
-            Lt -> "<="
-            Gt -> ">="
+    textConstraints = mconcat $ mkConstraint <$> constraints
+    Constraint constraints = _constraints p
+    mkConstraint :: (NamedVariable z, NamedVariable r) => Constraint1 z r IntDouble -> [LText]
+    mkConstraint (C1 (Just lowerBound) fun (Just upperBound)) | lowerBound == upperBound = [showCons fun "=" lowerBound]
+    mkConstraint (C1 lowerBoundMb fun upperBoundMb) = catMaybes [showCons fun ">=" <$> lowerBoundMb, showCons fun "<=" <$> upperBoundMb]
+    showCons fun op rhs = linearFunction fun <> " " <> op <> " " <> show rhs
+
     allBounds = Map.toList $ _bounds p
-    bounds = Text.unlines $ catMaybes $ uncurry mkBounds <$> allBounds
-    mkBounds :: (NamedVariable z, NamedVariable r) => Either z r -> (Maybe (R IntDouble), Maybe (R IntDouble)) -> Maybe Text
+    bounds = catMaybes $ uncurry mkBounds <$> allBounds
+    mkBounds :: (NamedVariable z, NamedVariable r) => Either z r -> (Maybe (R IntDouble), Maybe (R IntDouble)) -> Maybe LText
     mkBounds variable (Nothing, Nothing) = Nothing
-    mkBounds variable (lowerBoundMb, upperBoundMb) = pure $ indent $ (maybe "" (\lb -> show lb <> " <= ") lowerBoundMb) <> varName variable <> (maybe "" (\ub -> " <= " <> show ub) upperBoundMb)
+    mkBounds variable (lowerBoundMb, upperBoundMb) = Just $
+        maybe "" (\lb -> show lb <> " <= ") lowerBoundMb
+        <> varNameL variable
+        <> maybe "" (\ub -> " <= " <> show ub) upperBoundMb
 
-    integerVariablesLP = Text.unlines $ indent . varName <$> integerVariables
-    integerVariables = mapMaybe (either Just (const Nothing)) $ Set.toList (varsOfProgram p)
-    binaryVariablesLP = Text.unlines $ indent . varName <$> binaryVariables
-    binaryVariables = mapMaybe filterBinary allBounds
-    filterBinary (Left z, (Just 0.0, Just 1.0)) = Just z
-    filterBinary _                              = Nothing
+    integerVariables = varNameL <$> lefts (Set.toList $ varsOfProgram p)
+    binaryVariables = varNameL <$> mapMaybe onlyBinary allBounds
 
-indent :: Text -> Text
-indent str = "  " <> str
+    onlyBinary (Left z, (Just 0.0, Just 1.0)) = Just  z
+    onlyBinary _                              = Nothing
+
+indent :: [LText] -> [LText]
+indent = fmap ("  " <>)

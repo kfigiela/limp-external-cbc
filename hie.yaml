@@ -1,0 +1,8 @@
+cradle:
+  stack:
+    - path: ./test
+      component: "limp-external-cbc:test:limp-external-cbc-test"
+    - path: ./src
+      component: "limp-external-cbc:lib"
+    - path: ./app
+      component: "limp-external-cbc:exe:limp-external-cbc-exe"

@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 20e41e5710a3ed11f94e64fcec3d82dc53a31b5a5efde3187134dc75230bb10f
+-- hash: b6c1d8ba672865c970a6e482fbc7c859cd1a0c5e375509fab64aa86015a4d590
 
 name:           limp-external-cbc
 version:        0.1.0.0
@@ -35,6 +35,7 @@ library
       Paths_limp_external_cbc
   hs-source-dirs:
       src
+  default-extensions: ConstraintKinds DefaultSignatures FlexibleContexts FlexibleInstances OverloadedStrings ScopedTypeVariables TupleSections TypeApplications UndecidableInstances
   build-depends:
       base >=4.7 && <5
     , containers
@@ -55,6 +56,7 @@ executable limp-external-cbc-exe
       Paths_limp_external_cbc
   hs-source-dirs:
       app
+  default-extensions: ConstraintKinds DefaultSignatures FlexibleContexts FlexibleInstances OverloadedStrings ScopedTypeVariables TupleSections TypeApplications UndecidableInstances
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
@@ -75,14 +77,19 @@ test-suite limp-external-cbc-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Numeric.Limp.External.SolutionSpec
       Paths_limp_external_cbc
   hs-source-dirs:
       test
+  default-extensions: ConstraintKinds DefaultSignatures FlexibleContexts FlexibleInstances OverloadedStrings ScopedTypeVariables TupleSections TypeApplications UndecidableInstances
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
     , containers
     , fmt
+    , hspec
+    , hspec-discover
+    , hspec-expectations
     , limp
     , limp-external-cbc
     , parsec

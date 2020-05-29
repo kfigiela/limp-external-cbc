@@ -15,22 +15,27 @@ import           Text.ParserCombinators.Parsec.Number   (floating2, sign)
 import qualified Text.ParserCombinators.Parsec.Token    as P
 
 data SolutionStatus = Optimal | Infeasible | Unbounded | Stopped StopReason | Unknown
-  deriving (Show)
+  deriving (Show, Eq)
 
 data StopReason = TimeLimit | IterationsLimit | Difficulties | Interrupt
-  deriving (Show)
+  deriving (Show, Eq)
+
+type VarName = Text
+type WithinConstraint = Bool
+type Value = Double
+type Dual = Double
 
 solutionStatus :: Parser SolutionStatus
 solutionStatus =
   Optimal <$ string "Optimal"
-    <|> Infeasible <$ string "Infeasible"
-    <|> Infeasible <$ string "Integer infeasible"
-    <|> Unbounded <$ string "Unbounded"
-    <|> Stopped TimeLimit <$ string "Stopped on time"
-    <|> Stopped IterationsLimit <$ string "Stopped on iterations"
-    <|> Stopped Difficulties <$ string "Stopped on difficulties"
-    <|> Stopped Interrupt <$ string "Stopped on ctrl-c"
-    <|> Unknown <$ string "Status unknown"
+    <|> try (Infeasible <$ string "Infeasible")
+    <|> try (Infeasible <$ string "Integer infeasible")
+    <|> try (Unbounded <$ string "Unbounded")
+    <|> try (Stopped TimeLimit <$ string "Stopped on time")
+    <|> try (Stopped IterationsLimit <$ string "Stopped on iterations")
+    <|> try (Stopped Difficulties <$ string "Stopped on difficulties")
+    <|> try (Stopped Interrupt <$ string "Stopped on ctrl-c")
+    <|> try (Unknown <$ string "Status unknown")
 
 objectiveValue :: Parser Double
 objectiveValue = string " - objective value " *> signedFloating
@@ -50,7 +55,7 @@ value =
     status = option True (False <$ (char '*' >> char '*')) <* spaces
     varName = (:) <$> letter <*> many (letter <|> digit <|> oneOf "_[]{}/.&#$%~'@^")
 
-solution :: Parser (SolutionStatus, Double, Map Text (Bool, Double, Double))
+solution :: Parser (SolutionStatus, Double, Map VarName (WithinConstraint, Value, Double))
 solution = (,,) <$> solutionStatus <*> (objectiveValue <* newline) <*> (values <* eof)
 
 signedFloating :: Parser Double
